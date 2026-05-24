@@ -32,14 +32,12 @@ TFT_eSprite spr = TFT_eSprite(&tft); // 彻底移除易导致虚函数 Bug 的 c
 bool hasSHT20 = false;
 float temperature = NAN, humidity = NAN;
 
-bool wifiConnected = false, timeSynced = false, screenDimmed = false;
+bool wifiConnected = false, timeSynced = false;
 struct tm timeinfo;
 WeatherData weather;
 
 unsigned long lastSensorRead = 0, lastWeatherFetch = 0, lastAnimFrame = 0;
 unsigned long lastNtpSync = 0, lastWiFiAttempt = 0, lastFullDraw = 0;
-unsigned long lastActivity = 0;
-volatile bool bootPressed = false;
 bool fullRedraw = true;
 
 float animPhase = 0;
@@ -91,7 +89,6 @@ void drawParticles();
 void initAnimation();
 void drawAll();
 void setBacklight(int level);
-void IRAM_ATTR onBootPress();
 
 // ======================== BACKLIGHT ========================
 void setupBacklight() {
@@ -102,27 +99,6 @@ void setupBacklight() {
 
 void setBacklight(int level) {
   ledcWrite(BL_PWM_CH, constrain(level, 0, 255));
-}
-
-void IRAM_ATTR onBootPress() {
-  bootPressed = true;
-}
-
-void checkDimming() {
-  if (screenDimmed) {
-    if (bootPressed) {
-      bootPressed = false;
-      screenDimmed = false;
-      setBacklight(BL_FULL);
-      lastActivity = millis();
-      fullRedraw = true;
-    }
-    return;
-  }
-  if (millis() - lastActivity > DIM_TIMEOUT_MS) {
-    screenDimmed = true;
-    setBacklight(BL_DIM);
-  }
 }
 
 // ======================== WIFI ========================
@@ -541,9 +517,6 @@ void drawForecast() {
 }
 
 void drawAll() {
-  if (screenDimmed) return;
-
-  // 【核心修复】强制使用 spr.fillSprite 清洗内存缓冲区！杜绝残影！
   spr.fillSprite(getBgColor());
   
   drawParticles();
@@ -608,10 +581,8 @@ void setup() {
   spr.setTextDatum(TL_DATUM);
 
   initAnimation();
-  pinMode(BOOT_BTN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BOOT_BTN), onBootPress, FALLING);
 
-  lastActivity = lastSensorRead = lastWeatherFetch = lastNtpSync = millis();
+  lastSensorRead = lastWeatherFetch = lastNtpSync = millis();
   fullRedraw = true;
   drawAll();
 }
@@ -649,12 +620,10 @@ void loop() {
     updateParticles();
   }
 
-  if (!screenDimmed && now - lastFullDraw > 66) { 
+  if (now - lastFullDraw > 66) {
     lastFullDraw = now;
-    lastActivity = now;
     drawAll();
   }
 
-  checkDimming();
   delay(5);
 }
